@@ -3,7 +3,7 @@
    envoyées vers Google Sheets quand il y a du réseau. */
 (function () {
   'use strict';
-  var VERSION = '1.2.1';
+  var VERSION = '1.2.2';
   var E = window.BM_ENGINE;
   var MODES = ['Espèces', 'Wave', 'OM'];
   var UNITES = ['Pièce', 'Sachet', 'Paquet', 'Bouteille', 'Cannette', 'Boîte', 'Tas', 'Kg', 'Litre', 'Plateau'];
@@ -315,9 +315,7 @@
     }
     html(
       (vierge ? '<div class="info" style="font-size:17px"><b>Bienvenue !</b> Pour commencer, chargez les données de départ : ⚙︎ en haut à droite → « Charger une copie » → choisir le fichier <b>donnees_depart_Mathias.json</b>.<br><button class="btn" id="hStart">Charger les données de départ</button></div>' : '') +
-      '<div class="card dime"><h2>🙏 Dîme à verser</h2><div class="row between"><span class="big">' + fmt(Math.max(S.dimeDue, 0)) + '</span>' +
-      '<button class="btn inline" style="background:#fff;color:var(--vert)" id="hDime">J\'ai versé</button></div>' +
-      (S.dimeDue < 0 ? '<div class="small">Vous avez versé ' + fmt(-S.dimeDue) + ' d\'avance.</div>' : '') + '</div>' +
+      dimeCard('🙏 Dîme à verser') +
       '<div class="grid2">' +
       '<button class="card action" id="hCarnet" style="min-height:0;align-items:flex-start"><span class="muted">On me doit</span><span class="mid rouge">' + fmt(S.aEncaisser) + '</span></button>' +
       '<button class="card action" id="hCaisse" style="min-height:0;align-items:flex-start"><span class="muted">Argent attendu</span><span class="mid">' + fmt(S.caisse.attendu) + '</span></button></div>' +
@@ -333,12 +331,24 @@
       '<div class="list">' + (recents.length ? recents.map(evRow).join('') : '<div class="li muted">Rien pour l\'instant</div>') + '</div>'
     );
     on('[data-go]', 'click', function (el) { go(el.dataset.go); });
-    on('#hDime', 'click', function () { go('dime'); });
+    bindDimeCard();
     on('#hStart', 'click', function () { go('reglages'); });
     on('#hCarnet', 'click', function () { go('carnet'); });
     on('#hCaisse', 'click', function () { go('compter', { argent: 1 }); });
   };
   function annTxt(ann) { return ann ? '<div class="small" style="color:var(--rouge);text-decoration:none;opacity:1">↩︎ Annulé' + (ann.par ? ' par ' + esc(ann.par) : '') + ' ' + (ann.jour === today() ? 'aujourd\'hui' : 'le ' + dshort(ann.jour)) + '</div>' : ''; }
+  function dimeCard(titre) {
+    var cache = !!R.cacheDime;
+    return '<div class="card dime"><div class="row between"><h2 style="margin:0">' + titre + '</h2>' +
+      '<button class="chip" id="eyeDime" style="background:rgba(255,255,255,.18);border:0;color:#fff;padding:6px 12px;white-space:nowrap">' + (cache ? '👁 Afficher' : '🙈 Masquer') + '</button></div>' +
+      '<div class="row between" style="margin-top:6px"><span class="big">' + (cache ? '••••• F' : fmt(Math.max(S.dimeDue, 0))) + '</span>' +
+      '<button class="btn inline" style="background:#fff;color:var(--vert)" id="hDime">J\'ai versé</button></div>' +
+      (!cache && S.dimeDue < 0 ? '<div class="small">Vous avez versé ' + fmt(-S.dimeDue) + ' d\'avance.</div>' : '') + '</div>';
+  }
+  function bindDimeCard() {
+    on('#eyeDime', 'click', function () { R.cacheDime = !R.cacheDime; save('bm_reglages', R); render(); });
+    on('#hDime', 'click', function () { go('dime'); });
+  }
   function evRow(e) {
     var d = describe(e), ann = S.annules[e.id];
     return '<div class="li ' + (ann ? 'struck' : '') + '"><span class="ico">' + d[0] + '</span><span class="grow">' + esc(d[1]) +
@@ -734,7 +744,7 @@
       B = E.bilan(S, form.du, form.au); label = 'Du ' + dshort(form.du) + ' au ' + dshort(form.au);
     } else { var pr = periode(form.per); B = E.bilan(S, pr[0], pr[1]); label = pr[2]; }
     var chips = [['depuis', 'Depuis la dernière dîme'], ['jour', 'Aujourd\'hui'], ['semaine', 'Semaine'], ['mois', 'Ce mois'], ['moisPrec', 'Mois dernier'], ['perso', 'Choisir…']];
-    html('<div class="card dime"><h2>🙏 Dîme à verser (tout compris)</h2><div class="row between"><span class="big">' + fmt(Math.max(S.dimeDue, 0)) + '</span><button class="btn inline" style="background:#fff;color:var(--vert)" id="verser">J\'ai versé</button></div></div>' +
+    html(dimeCard('🙏 Dîme à verser') +
       '<div class="chips" style="margin-bottom:10px">' + chips.map(function (c) { return '<button class="chip ' + (form.per === c[0] ? 'on' : '') + '" data-per="' + c[0] + '">' + c[1] + '</button>'; }).join('') + '</div>' +
       (form.per === 'perso' ? '<div class="grid2"><input type="date" class="inp" id="du" style="font-size:16px" value="' + form.du + '"><input type="date" class="inp" id="au" style="font-size:16px" value="' + form.au + '"></div>' : '') +
       '<div class="card"><h2>' + esc(label) + '</h2>' +
@@ -760,7 +770,7 @@
     on('[data-per]', 'click', function (el) { form.per = el.dataset.per; render(); });
     on('#du', 'change', function (el) { form.du = el.value; render(); });
     on('#au', 'change', function (el) { form.au = el.value; render(); });
-    on('#verser', 'click', function () { go('dime'); });
+    bindDimeCard();
     on('#histo', 'click', function () { go('histo'); });
     on('#voirEp', 'click', function () { confirmBox('Afficher le montant de l\'épargne ?', 'Oui, afficher', function () { form.voirEp = true; render(); }); });
   };
