@@ -3,7 +3,7 @@
    envoyées vers Google Sheets quand il y a du réseau. */
 (function () {
   'use strict';
-  var VERSION = '1.1.0';
+  var VERSION = '1.2.0';
   var E = window.BM_ENGINE;
   var MODES = ['Espèces', 'Wave', 'OM'];
   var UNITES = ['Pièce', 'Sachet', 'Paquet', 'Bouteille', 'Cannette', 'Boîte', 'Tas', 'Kg', 'Litre', 'Plateau'];
@@ -526,7 +526,7 @@
     garde: { titre: 'On m\'a remis de l\'argent', ico: '📥', desc: 'Emprunt, monnaie à rendre, argent de Delphine…', pers: true },
     rendu: { titre: 'J\'ai rendu de l\'argent', ico: '📤', desc: 'Je rembourse ou je remets l\'argent gardé', pers: true },
     prelevement: { titre: 'J\'ai pris de l\'argent pour moi', ico: '👛', desc: 'Argent de poche, maison, famille' },
-    epargne: { titre: 'Mettre de côté (épargne)', ico: '🏦', desc: 'Épargne actuelle : ' },
+    epargne: { titre: 'Mettre de côté (épargne)', ico: '🏦', desc: 'Argent mis de côté hors de la boutique' },
     epargneRet: { titre: 'Reprendre de l\'épargne', ico: '🏧', desc: 'Remettre de l\'épargne dans la boutique' },
     apport: { titre: 'J\'ai ajouté mon argent', ico: '➕', desc: 'Argent personnel mis dans la boutique' }
   };
@@ -534,7 +534,7 @@
     var items = [['depense'], ['perte', '💔', 'Casse, périmé, pris pour la maison', 'Des articles sortis sans être vendus'], ['fournisseur'], ['pret'], ['garde'], ['rendu'], ['prelevement'], ['epargne'], ['epargneRet'], ['apport']];
     html('<div class="list">' + items.map(function (it) {
       var m = MONEY[it[0]] || { titre: it[2], ico: it[1], desc: it[3] };
-      var d = m.desc + (it[0] === 'epargne' ? fmt(S.epargne) : '');
+      var d = m.desc;
       return '<button class="li" data-k="' + it[0] + '"><span class="ico">' + m.ico + '</span><span class="grow"><b>' + m.titre + '</b><div class="muted">' + d + '</div></span><span>›</span></button>';
     }).join('') + '</div>');
     on('[data-k]', 'click', function (el) { if (el.dataset.k === 'perte') go('perte'); else go('money', { kind: el.dataset.k }); });
@@ -575,7 +575,7 @@
       else if (k === 'epargneRet') { ev.type = 'epargne'; ev.sens = -1; }
       else { ev.type = k; if (m.pers) ev.personne = form.p; }
       addEvent(ev, form.jour);
-      saved(m.titre + ' : ' + fmt(mt), m.pers && cur.p.personne ? 'personne' : 'home', m.pers && cur.p.personne ? { id: form.p } : null);
+      saved(k === 'epargne' || k === 'epargneRet' ? m.titre + ' : enregistré' : m.titre + ' : ' + fmt(mt), m.pers && cur.p.personne ? 'personne' : 'home', m.pers && cur.p.personne ? { id: form.p } : null);
     });
   };
   SCREENS.perte = function () {
@@ -613,17 +613,33 @@
   SCREENS.personne = function () {
     var p = P(cur.p.id), s = Math.round(p.solde);
     var histo = p.histo.slice().reverse();
+    function openList(list) {
+      return '<div class="list">' + list.slice().reverse().map(function (x) {
+        var det = x.lignes ? x.lignes.map(function (l) { return esc(l.qte + ' × ' + (l.nom || A(l.art).nom)) + ' <span class="muted">à ' + fmt(l.prix) + '</span>'; }).join('<br>') : '';
+        var partiel = x.reste < x.montant - 0.5;
+        return '<div class="li" style="align-items:flex-start"><span class="grow"><b style="font-size:15px">' + esc(x.txt) + '</b>' +
+          (det ? '<div style="font-size:15px;margin-top:2px">' + det + '</div>' : '') +
+          '<div class="muted">' + dshort(x.jour) + (partiel ? ' · déjà payé ' + fmt(x.montant - x.reste) + ' sur ' + fmt(x.montant) : '') + '</div></span>' +
+          '<span class="amt">' + fmt(x.reste) + '</span></div>';
+      }).join('') + '</div>';
+    }
+    var tD = p.dettes.reduce(function (s2, x) { return s2 + x.reste; }, 0), tA = p.avoirs.reduce(function (s2, x) { return s2 + x.reste; }, 0);
+    var detail = '';
+    if (p.dettes.length) detail += '<div class="daysep">🔴 Ce qu\'il me doit encore — ' + fmt(tD) + '</div>' + openList(p.dettes);
+    if (p.avoirs.length) detail += '<div class="daysep">🟠 Ce que je lui dois encore — ' + fmt(tA) + '</div>' + openList(p.avoirs);
+    if (p.dettes.length && p.avoirs.length) detail += '<div class="info">Différence : ' + (s > 0 ? 'il me doit ' + fmt(s) : s < 0 ? 'je lui dois ' + fmt(-s) : 'on est quittes') + ' (' + fmt(tD) + ' − ' + fmt(tA) + ')</div>';
     html('<div class="card" style="text-align:center"><div class="muted">' + (s > 0 ? 'Me doit' : s < 0 ? 'Je lui dois' : 'Solde') + '</div><div class="big ' + (s > 0 ? 'rouge' : s < 0 ? 'orange' : 'vert') + '">' + (s === 0 ? 'À jour ✅' : fmt(Math.abs(s))) + '</div></div>' +
       '<div class="grid2">' +
       (s > 0 ? '<button class="action" data-a="paiement"><span class="ico">💵</span>Il a payé</button>' : '<button class="action" data-a="rendu"><span class="ico">📤</span>Je lui ai rendu</button>') +
       '<button class="action" data-a="credit"><span class="ico">📝</span>Vente à crédit</button></div>' +
+      detail +
       '<div class="list" style="margin-top:12px">' +
       (s > 0 ? '<button class="li" id="rappel"><span class="ico">📲</span><span class="grow">Envoyer un rappel WhatsApp</span></button>' : '') +
       '<button class="li" data-a="pret"><span class="ico">🤝</span><span class="grow">Je lui ai prêté de l\'argent</span></button>' +
       '<button class="li" data-a="garde"><span class="ico">📥</span><span class="grow">Il m\'a remis de l\'argent (à rendre)</span></button>' +
       (s > 0 ? '<button class="li" data-a="rendu"><span class="ico">📤</span><span class="grow">Je lui ai rendu de l\'argent</span></button>' : '<button class="li" data-a="paiement"><span class="ico">💵</span><span class="grow">Il m\'a payé</span></button>') +
       '<button class="li" id="edit"><span class="ico">✏️</span><span class="grow">Modifier le nom / corriger le solde</span></button></div>' +
-      '<div class="daysep">Historique</div><div class="list">' + (histo.length ? histo.map(function (h) {
+      '<div class="daysep">Tout l\'historique</div><div class="list">' + (histo.length ? histo.map(function (h) {
         return '<div class="li"><span class="grow">' + esc(h.txt) + '<div class="muted">' + dshort(h.jour) + '</div></span><span class="amt ' + (h.m > 0 ? 'rouge' : 'vert') + '">' + (h.m > 0 ? '+' : '') + fmt(h.m) + '</span></div>';
       }).join('') : '<div class="li muted">Rien pour l\'instant</div>') + '</div>');
     on('[data-a]', 'click', function (el) {
@@ -631,7 +647,8 @@
       if (a === 'credit' || a === 'paiement') go(a, { personne: p.id }); else go('money', { kind: a, personne: p.id });
     });
     on('#rappel', 'click', function () {
-      var txt = 'Bonjour ' + p.nom + ', petit rappel de la boutique de Mathias : il reste ' + fmt(p.solde) + ' à payer. Merci et que Dieu vous bénisse !';
+      var lst = p.dettes.map(function (x) { return '- ' + dshort(x.jour) + ' : ' + (x.lignes ? x.lignes.map(function (l) { return l.qte + ' ' + (l.nom || A(l.art).nom); }).join(', ') : x.txt.replace('A pris à crédit : ', '')) + ' = ' + fmt(x.reste); }).join('\n');
+      var txt = 'Bonjour ' + p.nom + ', petit rappel de la boutique de Mathias :\n' + lst + '\nTotal à payer : ' + fmt(p.solde) + '.\nMerci et que Dieu vous bénisse !';
       window.open((p.tel ? 'https://wa.me/' + p.tel.replace(/\D/g, '') : 'https://wa.me/') + '?text=' + encodeURIComponent(txt), '_blank');
     });
     on('#edit', 'click', function () {
@@ -737,13 +754,14 @@
       '<div class="kv"><span>On me doit</span><b class="rouge">' + fmt(S.aEncaisser) + '</b></div>' +
       '<div class="kv"><span>Je dois aux personnes</span><b class="orange">' + fmt(S.aRendre) + '</b></div>' +
       '<div class="kv"><span>Je dois aux fournisseurs</span><b class="orange">' + fmt(S.detteFourn) + '</b></div>' +
-      '<div class="kv"><span>Épargne mise de côté</span><b>' + fmt(S.epargne) + '</b></div></div>' +
+      '<div class="kv"><span>Épargne mise de côté</span>' + (form.voirEp ? '<b>' + fmt(S.epargne) + '</b>' : '<button class="chip" id="voirEp">•••••  Afficher</button>') + '</div></div>' +
       '<button class="btn sec" id="histo">📜 Toutes mes saisies</button>');
     on('[data-per]', 'click', function (el) { form.per = el.dataset.per; render(); });
     on('#du', 'change', function (el) { form.du = el.value; render(); });
     on('#au', 'change', function (el) { form.au = el.value; render(); });
     on('#verser', 'click', function () { go('dime'); });
     on('#histo', 'click', function () { go('histo'); });
+    on('#voirEp', 'click', function () { confirmBox('Afficher le montant de l\'épargne ?', 'Oui, afficher', function () { form.voirEp = true; render(); }); });
   };
   SCREENS.dime = function () {
     html(dateChip() + '<div class="card dime"><h2>Dîme à verser</h2><div class="big">' + fmt(Math.max(S.dimeDue, 0)) + '</div></div>' +

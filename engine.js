@@ -25,12 +25,27 @@
     function cashOut(e, m, quoi) { S.caisse.attendu -= m; S.flux.push({ ts: e.ts, jour: e.jour, montant: -m, quoi: quoi }); }
     function pers(id) {
       if (!S.personnes[id]) S.personnes[id] = { id: id, nom: '?', solde: 0, histo: [] };
-      return S.personnes[id];
+      return newP(S.personnes[id]);
     }
     function fourn(id) {
       if (!S.fournisseurs[id]) S.fournisseurs[id] = { id: id, nom: '?', dette: 0 };
       return S.fournisseurs[id];
     }
+    function newP(p) { p.dettes = p.dettes || []; p.avoirs = p.avoirs || []; return p; }
+    function recalc(p) {
+      var a = 0, b = 0;
+      p.dettes.forEach(function (x) { a += x.reste; }); p.avoirs.forEach(function (x) { b += x.reste; });
+      p.solde = a - b;
+    }
+    // paie les éléments les plus anciens d'abord ; renvoie ce qui dépasse
+    function consume(list, montant) {
+      for (var i = 0; i < list.length && montant > 0; i++) {
+        var t = Math.min(list[i].reste, montant); list[i].reste -= t; montant -= t;
+      }
+      for (var j = list.length - 1; j >= 0; j--) if (list[j].reste <= 0.0001) list.splice(j, 1);
+      return montant;
+    }
+    function item(e, txt, m, extra) { var o = { jour: e.jour, ts: e.ts, txt: txt, montant: m, reste: m, id: e.id }; if (extra) for (var k in extra) o[k] = extra[k]; return o; }
     function use(id) { S.usage[id] = (S.usage[id] || 0) + 1; }
     function useP(id) { S.usagePers[id] = (S.usagePers[id] || 0) + 1; }
 
@@ -44,7 +59,14 @@
             S.ordreArticles.push(a.id);
           });
           (e.personnes || []).forEach(function (p) {
-            S.personnes[p.id] = { id: p.id, nom: p.nom, solde: p.solde, histo: p.solde ? [{ ts: e.ts, jour: e.jour, txt: 'Report du fichier Excel', m: p.solde }] : [] };
+            var np = newP({ id: p.id, nom: p.nom, solde: 0, histo: [] });
+            var its = p.items && p.items.length ? p.items : (p.solde ? [{ jour: e.jour, txt: 'Report du fichier Excel', m: p.solde }] : []);
+            its.forEach(function (x) {
+              var o = { jour: x.jour, ts: e.ts, txt: x.txt, montant: Math.abs(x.m), reste: Math.abs(x.m), report: true };
+              (x.m > 0 ? np.dettes : np.avoirs).push(o);
+              np.histo.push({ ts: e.ts, jour: x.jour, txt: x.txt + ' (repris de l\'Excel)', m: x.m });
+            });
+            recalc(np); S.personnes[p.id] = np;
           });
           (e.fournisseurs || []).forEach(function (f) { S.fournisseurs[f.id] = { id: f.id, nom: f.nom, dette: f.dette || 0 }; });
           var c = e.caisse || { esp: 0, wave: 0, om: 0 };
@@ -100,36 +122,46 @@
             noms.push(l.qte + ' ' + a.nom);
             S.ventes.push({ ts: e.ts, jour: e.jour, art: l.art, qte: l.qte, montant: mt, cout: cout, marge: mt - cout, mode: 'credit', personne: e.personne });
           });
-          p.solde += totc; useP(e.personne);
+          useP(e.personne);
+          p.dettes.push(item(e, 'A pris à crédit', totc, { lignes: e.lignes.map(function (l) { return { art: l.art, nom: (art(l.art) || {}).nom, qte: l.qte, prix: l.prix }; }) }));
+          recalc(p);
           p.histo.push({ ts: e.ts, jour: e.jour, txt: 'A pris à crédit : ' + noms.join(', '), m: totc, id: e.id });
           break;
 
         case 'paiement':
-          var pp = pers(e.personne); pp.solde -= e.montant; useP(e.personne);
+          var pp = pers(e.personne); useP(e.personne);
+          var trop = consume(pp.dettes, e.montant); if (trop > 0) pp.avoirs.push(item(e, 'A payé en trop', trop)); recalc(pp);
           pp.histo.push({ ts: e.ts, jour: e.jour, txt: 'A payé (' + (e.mode || 'Espèces') + ')', m: -e.montant, id: e.id });
           cashIn(e, e.montant, 'Paiement de ' + pp.nom);
           break;
 
         case 'pret':
-          var pr = pers(e.personne); pr.solde += e.montant; useP(e.personne);
+          var pr = pers(e.personne); useP(e.personne);
+          pr.dettes.push(item(e, 'Je lui ai prêté de l\'argent' + (e.note ? ' — ' + e.note : ''), e.montant)); recalc(pr);
           pr.histo.push({ ts: e.ts, jour: e.jour, txt: 'Je lui ai prêté / donné de l\'argent' + (e.note ? ' — ' + e.note : ''), m: e.montant, id: e.id });
           cashOut(e, e.montant, 'Prêt à ' + pr.nom);
           break;
 
         case 'garde':
-          var pg = pers(e.personne); pg.solde -= e.montant; useP(e.personne);
+          var pg = pers(e.personne); useP(e.personne);
+          pg.avoirs.push(item(e, 'M\'a remis de l\'argent (à lui rendre)' + (e.note ? ' — ' + e.note : ''), e.montant)); recalc(pg);
           pg.histo.push({ ts: e.ts, jour: e.jour, txt: 'M\'a remis de l\'argent (à lui rendre)' + (e.note ? ' — ' + e.note : ''), m: -e.montant, id: e.id });
           cashIn(e, e.montant, 'Argent reçu de ' + pg.nom);
           break;
 
         case 'rendu':
-          var prd = pers(e.personne); prd.solde += e.montant; useP(e.personne);
+          var prd = pers(e.personne); useP(e.personne);
+          var tropR = consume(prd.avoirs, e.montant); if (tropR > 0) prd.dettes.push(item(e, 'Je lui ai donné de l\'argent', tropR)); recalc(prd);
           prd.histo.push({ ts: e.ts, jour: e.jour, txt: 'Je lui ai rendu / remis de l\'argent' + (e.note ? ' — ' + e.note : ''), m: e.montant, id: e.id });
           cashOut(e, e.montant, 'Rendu à ' + prd.nom);
           break;
 
         case 'soldePersonne':
-          var ps = pers(e.personne), diff = e.solde - ps.solde; ps.solde = e.solde;
+          var ps = pers(e.personne), diff = e.solde - ps.solde;
+          ps.dettes = []; ps.avoirs = [];
+          if (e.solde > 0) ps.dettes.push(item(e, 'Solde corrigé' + (e.note ? ' — ' + e.note : ''), e.solde));
+          if (e.solde < 0) ps.avoirs.push(item(e, 'Solde corrigé' + (e.note ? ' — ' + e.note : ''), -e.solde));
+          recalc(ps);
           ps.histo.push({ ts: e.ts, jour: e.jour, txt: 'Solde corrigé', m: diff, id: e.id });
           break;
 
