@@ -3,7 +3,7 @@
    envoyées vers Google Sheets quand il y a du réseau. */
 (function () {
   'use strict';
-  var VERSION = '1.0.0';
+  var VERSION = '1.1.0';
   var E = window.BM_ENGINE;
   var MODES = ['Espèces', 'Wave', 'OM'];
   var UNITES = ['Pièce', 'Sachet', 'Paquet', 'Bouteille', 'Cannette', 'Boîte', 'Tas', 'Kg', 'Litre', 'Plateau'];
@@ -26,6 +26,7 @@
   function nowTime() { var d = new Date(); return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds()); }
   function addEvent(ev, jour) {
     ev.id = uid(); ev.jour = jour || today(); ev.ts = ev.jour + 'T' + nowTime() + '.' + String(Date.now() % 1000).padStart(3, '0');
+    if (R.appareil) ev.par = R.appareil;
     events.push(ev); save('bm_events', events); S = E.compute(events); syncSoon(); return ev;
   }
 
@@ -765,7 +766,7 @@
     list.slice(0, form.lim).forEach(function (e) {
       if (e.jour !== jour) { if (jour) h += '</div>'; jour = e.jour; h += '<div class="daysep">' + dlong(jour) + '</div><div class="list">'; }
       var d = describe(e), ann = S.annules[e.id];
-      h += '<div class="li ' + (ann ? 'struck' : '') + '"><span class="ico">' + d[0] + '</span><span class="grow">' + esc(d[1]) + (e.note && e.type === 'comptageCaisse' ? '<div class="muted">' + esc(e.note) + '</div>' : '') + '</span><span class="amt">' + d[2] + '</span>' +
+      h += '<div class="li ' + (ann ? 'struck' : '') + '"><span class="ico">' + d[0] + '</span><span class="grow">' + esc(d[1]) + (e.note && e.type === 'comptageCaisse' ? '<div class="muted">' + esc(e.note) + '</div>' : '') + (e.par ? '<div class="muted small">par ' + esc(e.par) + '</div>' : '') + '</span><span class="amt">' + d[2] + '</span>' +
         (!ann && e.type !== 'init' ? '<button class="x" data-ann="' + e.id + '" title="Annuler">↩︎</button>' : '') + '</div>';
     });
     if (jour) h += '</div>';
@@ -781,18 +782,22 @@
   // Réglages
   SCREENS.reglages = function () {
     var nonEnv = events.filter(function (e) { return !synced[e.id]; }).length;
-    html('<div class="card"><h2>☁️ Sauvegarde Google Sheets</h2>' +
+    html('<div class="card"><h2>📱 Cet appareil</h2><div class="muted">Qui utilise ce téléphone / cet ordinateur ?</div><div class="chips" style="margin-top:6px">' +
+      ['Mathias', 'Davy'].map(function (n) { return '<button class="chip ' + (R.appareil === n ? 'on' : '') + '" data-who="' + n + '">' + n + '</button>'; }).join('') + '</div></div>' +
+      '<div class="card"><h2>☁️ Sauvegarde Google Sheets</h2>' +
       '<div class="muted">Lien du script Google (fourni par Davy)</div><input class="inp" id="url" style="font-size:14px" value="' + esc(R.syncUrl) + '" placeholder="https://script.google.com/macros/s/…/exec">' +
       '<div class="muted" style="margin-top:8px">Code secret</div><input class="inp" id="tok" style="font-size:16px" value="' + esc(R.token) + '">' +
       '<button class="btn" id="saveSync">Enregistrer et envoyer</button>' +
       '<div class="muted" style="margin-top:8px">' + nonEnv + ' saisie(s) pas encore envoyée(s). ' + (R.lastSync ? 'Dernier envoi : ' + new Date(R.lastSync).toLocaleString('fr-FR') : '') + '</div>' +
-      '<button class="btn sec" id="restore">Récupérer mes données depuis Google</button></div>' +
+      '<div class="muted small" style="margin-top:6px">Les saisies faites sur un autre appareil (Mathias ou Davy) arrivent toutes seules quand il y a du réseau.</div>' +
+      '<button class="btn sec" id="restore">Tout récupérer depuis Google</button></div>' +
       '<div class="card"><h2>🙏 Dîme</h2><div class="muted">Taux (%)</div><input class="inp" id="taux" inputmode="numeric" value="' + Math.round(S.taux * 100) + '">' +
       '<div class="muted" style="margin-top:8px">Calculée sur</div><div class="chips"><button class="chip ' + (S.base !== 'net' ? 'on' : '') + '" data-b="marge">Bénéfice sur les ventes</button><button class="chip ' + (S.base === 'net' ? 'on' : '') + '" data-b="net">Bénéfice net (après dépenses)</button></div></div>' +
       '<div class="card"><h2>🔢 Comptage de départ</h2><div class="muted">À utiliser le jour du lancement (ou après une longue pause) : le prochain comptage du stock remettra les quantités à jour sans calculer de ventes.</div>' +
       '<button class="btn ' + (R.depart ? 'danger' : 'light') + '" id="depart">' + (R.depart ? 'Annuler le comptage de départ' : 'Le prochain comptage est un comptage de départ') + '</button></div>' +
       '<div class="card"><h2>💾 Copie de secours</h2><button class="btn light" id="exp">Télécharger une copie (fichier)</button><button class="btn light" id="imp">Charger une copie</button><input type="file" id="file" class="hidden"></div>' +
       '<div class="muted" style="text-align:center">Ma Boutique v' + VERSION + ' · ' + events.length + ' saisies</div>');
+    on('[data-who]', 'click', function (el) { R.appareil = el.dataset.who; save('bm_reglages', R); render(); });
     on('#saveSync', 'click', function () { R.syncUrl = $('#url').value.trim(); R.token = $('#tok').value.trim(); save('bm_reglages', R); doSync(true); });
     on('#restore', 'click', function () { R.syncUrl = $('#url').value.trim(); R.token = $('#tok').value.trim(); save('bm_reglages', R); restore(); });
     on('#taux', 'change', function (el) { var t = num(el.value); if (t != null && t >= 0 && t <= 100) { addEvent({ type: 'reglages', taux: t / 100 }); toast('Taux enregistré'); render(); } });
@@ -817,7 +822,7 @@
   function merge(list) {
     if (list.some(function (e) { return e && e.type === 'init'; })) events = events.filter(function (e) { return e.id !== 'init-vierge'; });
     var have = {}; events.forEach(function (e) { have[e.id] = 1; });
-    var n = 0; list.forEach(function (e) { if (e && e.id && !have[e.id]) { events.push(e); have[e.id] = 1; n++; } });
+    var n = 0; list.forEach(function (e) { if (e && e.id && e.id !== 'init-vierge' && !have[e.id]) { events.push(e); have[e.id] = 1; n++; } });
     save('bm_events', events); S = E.compute(events); return n;
   }
 
@@ -847,40 +852,47 @@
   function doSync(manual) {
     if (!R.syncUrl || syncing) { renderSync(); return; }
     if (!navigator.onLine) { renderSync(); return; }
-    var todo = events.filter(function (e) { return !synced[e.id]; }).slice(0, 300);
+    var todo = events.filter(function (e) { return !synced[e.id] && e.id !== 'init-vierge'; }).slice(0, 300);
     syncing = true; renderSync();
-    fetch(R.syncUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ token: R.token, events: todo.map(function (e) { return { id: e.id, ts: e.ts, jour: e.jour, type: e.type, resume: describe(e).slice(1).join(' '), json: JSON.stringify(e) }; }), resume: resume() }) })
+    fetch(R.syncUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ token: R.token, events: todo.map(function (e) { return { id: e.id, ts: e.ts, jour: e.jour, type: e.type, resume: describe(e).slice(1).join(' ') + (e.par ? ' — par ' + e.par : ''), json: JSON.stringify(e) }; }), resume: S.ordreArticles.length ? resume() : null }) })
       .then(function (r) { return r.json(); })
       .then(function (d) {
-        syncing = false;
         if (!d.ok) throw new Error(d.error || 'refusé');
         (d.ids || []).forEach(function (id) { synced[id] = 1; }); save('bm_synced', synced);
-        R.lastSync = Date.now(); save('bm_reglages', R); syncErr = '';
-        if (events.some(function (e) { return !synced[e.id]; })) return doSync(manual);
-        if (manual) toast('☁️ Sauvegarde Google à jour'); render();
+        if (events.some(function (e) { return !synced[e.id] && e.id !== 'init-vierge'; })) { syncing = false; return doSync(manual); }
+        return pull().then(function (n) {
+          syncing = false; R.lastSync = Date.now(); save('bm_reglages', R); syncErr = '';
+          if (manual) toast(n ? '☁️ À jour — ' + n + ' saisie(s) reçue(s) d\'un autre appareil' : '☁️ Sauvegarde Google à jour');
+          if (n || manual) render(); else renderSync();
+        });
       })
       .catch(function (err) { syncing = false; syncErr = String(err.message || err); renderSync(); if (manual) toast('Envoi impossible pour l\'instant (' + syncErr + '). Vos saisies restent dans le téléphone.'); });
+  }
+  // Récupère les saisies faites sur les autres appareils (Mathias, Davy…)
+  function pull() {
+    var from = R.pullRow || 0;
+    return fetch(R.syncUrl + (R.syncUrl.indexOf('?') < 0 ? '?' : '&') + 'action=since&from=' + from + '&token=' + encodeURIComponent(R.token))
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) throw new Error(d.error || 'refusé');
+        var list = (d.events || []).map(function (x) { try { return JSON.parse(x); } catch (e) { return null; } })
+          .filter(function (e) { return e && e.id && e.id !== 'init-vierge'; });
+        list.forEach(function (e) { synced[e.id] = 1; }); save('bm_synced', synced);
+        var n = list.length ? merge(list) : 0;
+        R.pullRow = d.next != null ? d.next : from + (d.events || []).length; save('bm_reglages', R);
+        return n;
+      });
   }
   function restore() {
     if (!R.syncUrl) return toast('Mettez d\'abord le lien du script');
     toast('⏳ Récupération…');
-    fetch(R.syncUrl + (R.syncUrl.indexOf('?') < 0 ? '?' : '&') + 'action=all&token=' + encodeURIComponent(R.token))
-      .then(function (r) { return r.json(); })
-      .then(function (d) {
-        if (!d.ok) throw new Error(d.error || 'refusé');
-        var list = d.events.map(function (x) { return JSON.parse(x); });
-        list.forEach(function (e) { synced[e.id] = 1; }); save('bm_synced', synced);
-        // si on récupère un historique complet, on remplace les données de départ du téléphone si elles sont vierges
-        if (list.some(function (e) { return e.type === 'init'; })) {
-          var local = events.filter(function (e) { return e.type !== 'init' || list.some(function (x) { return x.id === e.id; }); });
-          events = local;
-        }
-        var n = merge(list); toast('✅ ' + n + ' saisie(s) récupérée(s)'); render();
-      })
+    R.pullRow = 0; save('bm_reglages', R);
+    pull().then(function (n) { toast('✅ ' + n + ' saisie(s) récupérée(s)'); render(); })
       .catch(function (err) { toast('Récupération impossible : ' + (err.message || err)); });
   }
   window.addEventListener('online', function () { doSync(false); });
-  setInterval(function () { if (events.some(function (e) { return !synced[e.id]; })) doSync(false); }, 120000);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) doSync(false); });
+  setInterval(function () { doSync(false); }, 90000);
 
   // ---------- Démarrage ----------
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
