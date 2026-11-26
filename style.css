@@ -82,7 +82,7 @@ table.t td.n,table.t th.n{text-align:right;white-space:nowrap}
 .kv:last-child{border-bottom:0}
 .kv b{white-space:nowrap}
 .daysep{font-size:14px;color:var(--gris);font-weight:700;margin:14px 4px 6px}
-.struck{text-decoration:line-through;opacity:.5}
+.struck .grow,.struck .amt{text-decoration:line-through;color:#8a8f88}.struck .grow .small{text-decoration:none!important;display:inline-block}
 .tag{display:inline-block;font-size:12px;border-radius:8px;padding:2px 7px;background:#eef0ea;color:var(--gris);font-weight:700}
 .tag.r{background:var(--rouge2);color:var(--rouge)}
 .tag.o{background:var(--orange2);color:var(--orange)}

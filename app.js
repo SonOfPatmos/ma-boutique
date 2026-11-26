@@ -3,7 +3,7 @@
    envoyées vers Google Sheets quand il y a du réseau. */
 (function () {
   'use strict';
-  var VERSION = '1.2.0';
+  var VERSION = '1.2.1';
   var E = window.BM_ENGINE;
   var MODES = ['Espèces', 'Wave', 'OM'];
   var UNITES = ['Pièce', 'Sachet', 'Paquet', 'Bouteille', 'Cannette', 'Boîte', 'Tas', 'Kg', 'Litre', 'Plateau'];
@@ -67,7 +67,7 @@
       case 'personne': return ['👤', 'Personne : ' + (e.p.nom || P(e.p.id).nom), ''];
       case 'fournisseur': return ['🏭', 'Fournisseur : ' + e.f.nom, ''];
       case 'reglages': return ['⚙︎', 'Réglages modifiés', ''];
-      case 'annule': return ['↩︎', 'Annulation', ''];
+      case 'annule': var r = events.filter(function (x) { return x.id === e.ref; })[0]; return ['↩︎', 'Annulation de : ' + (r && r.type !== 'annule' ? describe(r).slice(1).join(' ') + (r.par ? ' (saisi par ' + r.par + ')' : '') : '?'), ''];
     }
     return ['•', e.type, ''];
   }
@@ -338,10 +338,11 @@
     on('#hCarnet', 'click', function () { go('carnet'); });
     on('#hCaisse', 'click', function () { go('compter', { argent: 1 }); });
   };
+  function annTxt(ann) { return ann ? '<div class="small" style="color:var(--rouge);text-decoration:none;opacity:1">↩︎ Annulé' + (ann.par ? ' par ' + esc(ann.par) : '') + ' ' + (ann.jour === today() ? 'aujourd\'hui' : 'le ' + dshort(ann.jour)) + '</div>' : ''; }
   function evRow(e) {
     var d = describe(e), ann = S.annules[e.id];
     return '<div class="li ' + (ann ? 'struck' : '') + '"><span class="ico">' + d[0] + '</span><span class="grow">' + esc(d[1]) +
-      '<div class="muted">' + dshort(e.jour) + '</div></span><span class="amt">' + d[2] + '</span></div>';
+      '<div class="muted">' + dshort(e.jour) + '</div>' + annTxt(ann) + '</span><span class="amt">' + d[2] + '</span></div>';
   }
 
   // Vente à crédit
@@ -784,7 +785,7 @@
     list.slice(0, form.lim).forEach(function (e) {
       if (e.jour !== jour) { if (jour) h += '</div>'; jour = e.jour; h += '<div class="daysep">' + dlong(jour) + '</div><div class="list">'; }
       var d = describe(e), ann = S.annules[e.id];
-      h += '<div class="li ' + (ann ? 'struck' : '') + '"><span class="ico">' + d[0] + '</span><span class="grow">' + esc(d[1]) + (e.note && e.type === 'comptageCaisse' ? '<div class="muted">' + esc(e.note) + '</div>' : '') + (e.par ? '<div class="muted small">par ' + esc(e.par) + '</div>' : '') + '</span><span class="amt">' + d[2] + '</span>' +
+      h += '<div class="li ' + (ann ? 'struck' : '') + '"><span class="ico">' + d[0] + '</span><span class="grow">' + esc(d[1]) + (e.note && e.type === 'comptageCaisse' ? '<div class="muted">' + esc(e.note) + '</div>' : '') + (e.par ? '<div class="muted small">par ' + esc(e.par) + '</div>' : '') + annTxt(ann) + '</span><span class="amt">' + d[2] + '</span>' +
         (!ann && e.type !== 'init' ? '<button class="x" data-ann="' + e.id + '" title="Annuler">↩︎</button>' : '') + '</div>';
     });
     if (jour) h += '</div>';
