@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b7a4b">
+<title>Ma Boutique</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header id="top">
+  <button id="btnBack" class="hbtn" aria-label="Retour">‹</button>
+  <h1 id="title">Ma Boutique</h1>
+  <button id="sync" class="pill"></button>
+  <button id="btnGear" class="hbtn" aria-label="Réglages">⚙︎</button>
+</header>
+<main id="view"></main>
+<nav id="tabs">
+  <button data-tab="home"><span>🏠</span>Accueil</button>
+  <button data-tab="carnet"><span>📒</span>Carnet</button>
+  <button data-tab="articles"><span>📦</span>Articles</button>
+  <button data-tab="bilan"><span>📊</span>Bilan</button>
+</nav>
+<div id="sheet" class="sheet hidden"></div>
+<div id="toast" class="toast hidden"></div>
+<script src="seed.js"></script>
+<script src="engine.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
