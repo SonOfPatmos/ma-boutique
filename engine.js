@@ -74,6 +74,10 @@
           S.caisse.attendu = S.caisse.dernier.total;
           break;
 
+        case 'dimeAjust':
+          S.dimeDepart += e.montant;
+          break;
+
         case 'reglages':
           if (e.taux != null) S.taux = e.taux;
           if (e.base) S.base = e.base;

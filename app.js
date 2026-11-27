@@ -3,7 +3,7 @@
    envoyées vers Google Sheets quand il y a du réseau. */
 (function () {
   'use strict';
-  var VERSION = '1.2.2';
+  var VERSION = '1.2.3';
   var E = window.BM_ENGINE;
   var MODES = ['Espèces', 'Wave', 'OM'];
   var UNITES = ['Pièce', 'Sachet', 'Paquet', 'Bouteille', 'Cannette', 'Boîte', 'Tas', 'Kg', 'Litre', 'Plateau'];
@@ -63,6 +63,7 @@
       case 'apport': return ['➕', 'Ajouté mon argent' + m, fmt(e.montant)];
       case 'epargne': return ['🏦', (e.sens > 0 ? 'Mis de côté (épargne)' : 'Repris de l\'épargne') + m, fmt(e.montant)];
       case 'dime': return ['🙏', 'Dîme versée' + m, fmt(e.montant)];
+      case 'dimeAjust': return ['✏️', 'Dîme à verser corrigée (' + (e.montant >= 0 ? '+' : '') + fmt(e.montant) + ')' + (e.note ? ' — ' + e.note : ''), ''];
       case 'article': return ['📦', 'Article : ' + (e.art.nom || A(e.art.id).nom), e.art.prix != null ? fmt(e.art.prix) : ''];
       case 'personne': return ['👤', 'Personne : ' + (e.p.nom || P(e.p.id).nom), ''];
       case 'fournisseur': return ['🏭', 'Fournisseur : ' + e.f.nom, ''];
@@ -821,7 +822,9 @@
       '<div class="muted small" style="margin-top:6px">Les saisies faites sur un autre appareil (Mathias ou Davy) arrivent toutes seules quand il y a du réseau.</div>' +
       '<button class="btn sec" id="restore">Tout récupérer depuis Google</button></div>' +
       '<div class="card"><h2>🙏 Dîme</h2><div class="muted">Taux (%)</div><input class="inp" id="taux" inputmode="numeric" value="' + Math.round(S.taux * 100) + '">' +
-      '<div class="muted" style="margin-top:8px">Calculée sur</div><div class="chips"><button class="chip ' + (S.base !== 'net' ? 'on' : '') + '" data-b="marge">Bénéfice sur les ventes</button><button class="chip ' + (S.base === 'net' ? 'on' : '') + '" data-b="net">Bénéfice net (après dépenses)</button></div></div>' +
+      '<div class="muted" style="margin-top:12px">Dîme à verser actuellement : <b>' + fmt(S.dimeDue) + '</b>. Pour la corriger, tapez le montant exact :</div>' +
+      '<div class="row" style="margin-top:6px"><input class="inp grow" id="dimeFix" inputmode="numeric" placeholder="Montant exact"><button class="btn inline" id="dimeFixOk">Corriger</button></div>' +
+      '<div class="muted" style="margin-top:12px">Calculée sur</div><div class="chips"><button class="chip ' + (S.base !== 'net' ? 'on' : '') + '" data-b="marge">Bénéfice sur les ventes</button><button class="chip ' + (S.base === 'net' ? 'on' : '') + '" data-b="net">Bénéfice net (après dépenses)</button></div></div>' +
       '<div class="card"><h2>🔢 Comptage de départ</h2><div class="muted">À utiliser le jour du lancement (ou après une longue pause) : le prochain comptage du stock remettra les quantités à jour sans calculer de ventes.</div>' +
       '<button class="btn ' + (R.depart ? 'danger' : 'light') + '" id="depart">' + (R.depart ? 'Annuler le comptage de départ' : 'Le prochain comptage est un comptage de départ') + '</button></div>' +
       '<div class="card"><h2>💾 Copie de secours</h2><button class="btn light" id="exp">Télécharger une copie (fichier)</button><button class="btn light" id="imp">Charger une copie</button><input type="file" id="file" class="hidden"></div>' +
@@ -831,6 +834,13 @@
     on('#restore', 'click', function () { R.syncUrl = $('#url').value.trim(); R.token = $('#tok').value.trim(); save('bm_reglages', R); restore(); });
     on('#taux', 'change', function (el) { var t = num(el.value); if (t != null && t >= 0 && t <= 100) { addEvent({ type: 'reglages', taux: t / 100 }); toast('Taux enregistré'); render(); } });
     on('[data-b]', 'click', function (el) { addEvent({ type: 'reglages', base: el.dataset.b }); render(); });
+    on('#dimeFixOk', 'click', function () {
+      var v = num($('#dimeFix').value); if (v == null) return $('#dimeFix').focus();
+      var delta = Math.round(v - S.dimeDue); if (!delta) return toast('C\'est déjà ce montant');
+      confirmBox('Mettre la dîme à verser à ' + fmt(v) + ' ? (au lieu de ' + fmt(S.dimeDue) + ')', 'Oui, corriger', function () {
+        addEvent({ type: 'dimeAjust', montant: delta }); toast('✅ Dîme à verser : ' + fmt(S.dimeDue)); render();
+      });
+    });
     on('#depart', 'click', function () { R.depart = !R.depart; save('bm_reglages', R); render(); });
     on('#exp', 'click', function () {
       var blob = new Blob([JSON.stringify({ app: 'MaBoutique', version: VERSION, date: new Date().toISOString(), events: events })], { type: 'application/json' });
